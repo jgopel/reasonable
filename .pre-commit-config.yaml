@@ -1,0 +1,58 @@
+repos:
+  # Language agnostic formatting
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: detect-private-key
+      - id: name-tests-test
+        args:
+          - --pytest-test-first
+      - id: check-case-conflict
+      - id: check-executables-have-shebangs
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: check-toml
+      - id: check-yaml
+      - id: debug-statements
+      - id: end-of-file-fixer
+      - id: fix-byte-order-marker
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+  - repo: https://github.com/google/yamlfmt
+    rev: v0.20.0
+    hooks:
+      - id: yamlfmt
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+        args:
+          - --wrap=80
+  # Rust
+  - repo: https://github.com/DevinR528/cargo-sort
+    rev: v2.0.2
+    hooks:
+      - id: cargo-sort
+  - repo: local
+    hooks:
+      - id: cargo-machete
+        name: cargo machete
+        entry: bash -c 'cargo machete --fix'
+        language: rust
+        pass_filenames: false
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: bash -c 'cargo fmt'
+        language: rust
+        pass_filenames: false
+      - id: cargo-check
+        name: cargo check
+        entry: bash -c 'RUSTFLAGS="$RUSTFLAGS --deny warnings" cargo check --all-targets --all-features'
+        language: rust
+        pass_filenames: false
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: bash -c 'RUSTFLAGS="$RUSTFLAGS --deny warnings" cargo clippy --all-targets --all-features'
+        language: rust
+        pass_filenames: false
