@@ -4,6 +4,8 @@ pub enum Error<T> {
     MutexPosioned(#[from] std::sync::PoisonError<T>),
     #[error("All connections active")]
     AllConnectionsActive,
+    #[error("At rate limit")]
+    AtRateLimit,
 }
 
 pub struct Permit {}
@@ -48,6 +50,11 @@ impl<const MAX_SIMULTANEOUS: usize> UnfairRateLimiter<MAX_SIMULTANEOUS> {
             return Err(Error::AllConnectionsActive);
         }
 
+        debug_assert!(state.expiry_times.len() <= MAX_SIMULTANEOUS);
+        if state.expiry_times.len() == MAX_SIMULTANEOUS {
+            return Err(Error::AtRateLimit);
+        }
+
         Ok(Permit {})
     }
 
@@ -60,6 +67,12 @@ impl<const MAX_SIMULTANEOUS: usize> UnfairRateLimiter<MAX_SIMULTANEOUS> {
 mod tests {
     use super::*;
 
+    fn dt_from_str(str: &str) -> chrono::NaiveDateTime {
+        chrono::DateTime::parse_from_rfc3339(str)
+            .unwrap()
+            .naive_utc()
+    }
+
     #[test]
     fn test_can_acquire_permit_from_empty_rate_limiter() {
         let initial_state = State {
@@ -71,7 +84,7 @@ mod tests {
             state: std::sync::Mutex::new(initial_state),
         };
 
-        let result = rate_limiter.try_acquire_permit();
+        let result = rate_limiter.try_acquire_permit_impl(dt_from_str("2022-01-02 03:04:05Z"));
 
         assert!(result.is_ok());
         // TODO: Do we need to assert anything about the permit?
@@ -89,26 +102,31 @@ mod tests {
             state: std::sync::Mutex::new(initial_state),
         };
 
-        let result = rate_limiter.try_acquire_permit();
+        let result = rate_limiter.try_acquire_permit_impl(dt_from_str("2022-01-02 03:04:05Z"));
 
         assert!(matches!(result, Err(Error::AllConnectionsActive)));
     }
 
-    // #[test]
-    // fn test_cannot_acquire_permit_when_previous_permits_are_not_expired() {
-    //     let initial_state = State {
-    //         active_connection_count: 0,
-    //         expiry_times: std::collections::VecDeque::default(),
-    //     };
-    //     let rate_limiter = UnfairRateLimiter::<2> {
-    //         interval: chrono::Duration::from_secs(43),
-    //         state: std::sync::Mutex::new(initial_state),
-    //     };
-    //
-    //     let result = rate_limiter.try_acquire_permit();
-    //
-    //     assert!(matches!(result, Err(Error::AllConnectionsActive)));
-    // }
+    #[test]
+    fn test_cannot_acquire_permit_when_previous_permits_are_not_expired() {
+        let initial_state = State {
+            active_connection_count: 0,
+            expiry_times: std::collections::VecDeque::from([
+                dt_from_str("2022-01-02 03:04:03Z"),
+                dt_from_str("2022-01-02 03:04:04Z"),
+            ]),
+        };
+        let rate_limiter = UnfairRateLimiter::<2> {
+            interval: chrono::Duration::seconds(5),
+            state: std::sync::Mutex::new(initial_state),
+        };
+
+        let result = rate_limiter.try_acquire_permit_impl(dt_from_str("2022-01-02 03:04:05Z"));
+
+        assert!(matches!(result, Err(Error::AtRateLimit)));
+    }
 
     // TODO: Test that dropping a permit adds it to the state correctly
+    // TODO: Test all times in expiry_times exactly at current time
+    // TODO: Test all times in expiry_times maximally far from current time
 }
