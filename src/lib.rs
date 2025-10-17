@@ -73,6 +73,8 @@ impl<const MAX_SIMULTANEOUS: usize> UnfairRateLimiter<MAX_SIMULTANEOUS> {
     pub fn try_acquire_permit(&self) -> Result<Permit, Error<std::sync::MutexGuard<'_, State>>> {
         self.try_acquire_permit_impl(&chrono::Utc::now().naive_utc())
     }
+
+    // TODO: Acquire multiple permits at once
 }
 
 #[cfg(test)]
