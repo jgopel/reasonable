@@ -2,10 +2,8 @@
 pub enum Error<T> {
     #[error("Mutex posioned")]
     MutexPosioned(#[from] std::sync::PoisonError<T>),
-    #[error("All connections active")]
-    AllConnectionsActive,
-    #[error("At rate limit")]
-    AtRateLimit,
+    #[error("A permit cannot currently be acquired")]
+    NoPermitAvailable,
 }
 
 pub struct Permit {}
@@ -47,12 +45,17 @@ impl<const MAX_SIMULTANEOUS: usize> UnfairRateLimiter<MAX_SIMULTANEOUS> {
 
         debug_assert!(state.active_connection_count <= MAX_SIMULTANEOUS);
         if state.active_connection_count == MAX_SIMULTANEOUS {
-            return Err(Error::AllConnectionsActive);
+            return Err(Error::NoPermitAvailable);
         }
 
         debug_assert!(state.expiry_times.len() <= MAX_SIMULTANEOUS);
         if state.expiry_times.len() == MAX_SIMULTANEOUS {
-            return Err(Error::AtRateLimit);
+            return Err(Error::NoPermitAvailable);
+        }
+
+        debug_assert!(state.expiry_times.len() + state.active_connection_count <= MAX_SIMULTANEOUS);
+        if state.active_connection_count + state.expiry_times.len() == MAX_SIMULTANEOUS {
+            return Err(Error::NoPermitAvailable);
         }
 
         Ok(Permit {})
@@ -104,7 +107,7 @@ mod tests {
 
         let result = rate_limiter.try_acquire_permit_impl(dt_from_str("2022-01-02 03:04:05Z"));
 
-        assert!(matches!(result, Err(Error::AllConnectionsActive)));
+        assert!(matches!(result, Err(Error::NoPermitAvailable)));
     }
 
     #[test]
@@ -123,7 +126,28 @@ mod tests {
 
         let result = rate_limiter.try_acquire_permit_impl(dt_from_str("2022-01-02 03:04:05Z"));
 
-        assert!(matches!(result, Err(Error::AtRateLimit)));
+        assert!(matches!(result, Err(Error::NoPermitAvailable)));
+    }
+
+    #[test]
+    fn test_cannot_acquire_permit_when_sum_of_active_connections_and_expired_connections_equals_max()
+     {
+        const CONNECTION_COUNT: usize = 10;
+        let initial_state = State {
+            active_connection_count: 8,
+            expiry_times: std::collections::VecDeque::from([
+                dt_from_str("2022-01-02 03:04:03Z"),
+                dt_from_str("2022-01-02 03:04:04Z"),
+            ]),
+        };
+        let rate_limiter = UnfairRateLimiter::<CONNECTION_COUNT> {
+            interval: chrono::Duration::seconds(5),
+            state: std::sync::Mutex::new(initial_state),
+        };
+
+        let result = rate_limiter.try_acquire_permit_impl(dt_from_str("2022-01-02 03:04:05Z"));
+
+        assert!(matches!(result, Err(Error::NoPermitAvailable)));
     }
 
     // TODO: Test that dropping a permit adds it to the state correctly
