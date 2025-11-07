@@ -25,17 +25,22 @@ impl<'a, const MAX_SIMULTANEOUS: usize> Permit<'a, MAX_SIMULTANEOUS> {
             parent_rate_limiter,
         })
     }
-}
 
-impl<const MAX_SIMULTANEOUS: usize> Drop for Permit<'_, MAX_SIMULTANEOUS> {
-    fn drop(&mut self) {
+    // TODO: Consider injecting a clock
+    fn drop_impl(&mut self, at_time: chrono::NaiveDateTime) {
         let mut state = self
             .parent_rate_limiter
             .state
             .lock()
             .expect("This should never fail");
         state.active_connection_count -= 1;
-        state.expiry_times.push_back(chrono::Utc::now().naive_utc());
+        state.expiry_times.push_back(at_time);
+    }
+}
+
+impl<const MAX_SIMULTANEOUS: usize> Drop for Permit<'_, MAX_SIMULTANEOUS> {
+    fn drop(&mut self) {
+        self.drop_impl(chrono::Utc::now().naive_utc());
     }
 }
 
@@ -132,9 +137,9 @@ mod tests {
             state: std::sync::Mutex::new(initial_state),
         };
 
-        let result = rate_limiter.try_acquire_permit_impl(&dt_from_str("2022-01-02 03:04:05Z"));
-
-        assert!(result.is_ok());
+        let _permit = rate_limiter
+            .try_acquire_permit_impl(&dt_from_str("2022-01-02 03:04:05Z"))
+            .unwrap();
 
         assert_eq!(
             *rate_limiter.state.lock().unwrap(),
@@ -248,9 +253,9 @@ mod tests {
             state: std::sync::Mutex::new(initial_state),
         };
 
-        let result = rate_limiter.try_acquire_permit_impl(&dt_from_str("2022-01-02 03:04:05Z"));
-
-        assert!(result.is_ok());
+        let _permit = rate_limiter
+            .try_acquire_permit_impl(&dt_from_str("2022-01-02 03:04:05Z"))
+            .unwrap();
 
         assert_eq!(
             *rate_limiter.state.lock().unwrap(),
@@ -261,7 +266,42 @@ mod tests {
         );
     }
 
-    // TODO: Test that dropping a permit adds it to the state correctly
+    #[test]
+    fn test_dropping_a_permit_updates_the_state() {
+        let initial_state = State {
+            active_connection_count: 1,
+            expiry_times: std::collections::VecDeque::default(),
+        };
+        let rate_limiter = UnfairRateLimiter::<42> {
+            interval: chrono::Duration::seconds(43),
+            state: std::sync::Mutex::new(initial_state),
+        };
+
+        let mut permit = rate_limiter
+            .try_acquire_permit_impl(&dt_from_str("2022-01-02 03:04:05Z"))
+            .unwrap();
+
+        assert_eq!(
+            *rate_limiter.state.lock().unwrap(),
+            State {
+                active_connection_count: 2,
+                expiry_times: std::collections::VecDeque::default()
+            }
+        );
+
+        permit.drop_impl(dt_from_str("2022-01-02 03:04:06Z"));
+
+        assert_eq!(
+            *rate_limiter.state.lock().unwrap(),
+            State {
+                active_connection_count: 1,
+                expiry_times: std::collections::VecDeque::from([dt_from_str(
+                    "2022-01-02 03:04:06Z"
+                )])
+            }
+        );
+    }
+
     // TODO: Test all times in expiry_times exactly at current time
     // TODO: Test all times in expiry_times maximally far from current time
 }
