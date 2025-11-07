@@ -70,12 +70,12 @@ impl<const MAX_SIMULTANEOUS: usize> UnfairRateLimiter<MAX_SIMULTANEOUS> {
         expiry_times: &mut ExpiryTimes,
         for_time: &chrono::NaiveDateTime,
         interval: &chrono::Duration,
-    ) {
+    ) -> usize {
         let partition_point = expiry_times.partition_point(|time| *time < (*for_time - *interval));
         for _ in 0..partition_point {
             let _ = expiry_times.pop_front();
         }
-        // TODO: Should this return something?
+        partition_point
     }
 
     fn try_acquire_permit_impl(
