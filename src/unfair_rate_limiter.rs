@@ -2,8 +2,8 @@
 #[derive(Debug, thiserror::Error)]
 pub enum Error<T> {
     /// The internal mutex was poisoned.
-    #[error("Mutex posioned")]
-    MutexPosioned(#[from] std::sync::PoisonError<T>),
+    #[error("Mutex poisoned")]
+    MutexPoisoned(#[from] std::sync::PoisonError<T>),
     /// A permit cannot currently be acquired because the limit has been reached.
     ///
     /// Contains the time when the next permit might become available, if known.
@@ -17,6 +17,7 @@ pub enum Error<T> {
 /// remains unavailable for the configured `interval` of the rate limiter. This means the
 /// cooldown period starts at the moment the permit is dropped, not when it was created.
 #[derive(Debug)]
+#[must_use]
 pub struct SinglePermit<'a, const MAX_SIMULTANEOUS: usize> {
     parent_rate_limiter: &'a UnfairRateLimiter<MAX_SIMULTANEOUS>,
 }
@@ -55,6 +56,7 @@ impl<const MAX_SIMULTANEOUS: usize> Drop for SinglePermit<'_, MAX_SIMULTANEOUS> 
 /// remain unavailable for the configured `interval` of the rate limiter. This means the
 /// cooldown period starts at the moment the permits are dropped.
 #[derive(Debug)]
+#[must_use]
 pub struct MultiPermit<'a, const MAX_SIMULTANEOUS: usize> {
     parent_rate_limiter: &'a UnfairRateLimiter<MAX_SIMULTANEOUS>,
     num_permits: usize,
@@ -200,20 +202,6 @@ impl<const MAX_SIMULTANEOUS: usize> UnfairRateLimiter<MAX_SIMULTANEOUS> {
         SinglePermit::new(self)
     }
 
-    /// Attempts to acquire a single permit.
-    ///
-    /// Returns a [`SinglePermit`] if a slot is available.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Error::NoPermitAvailable`] if all slots are occupied (either by active permits or by cooldowns from recently dropped permits).
-    /// Returns [`Error::MutexPosioned`] if the internal state mutex is poisoned.
-    pub fn try_acquire_permit(
-        &self,
-    ) -> Result<SinglePermit<'_, MAX_SIMULTANEOUS>, Error<std::sync::MutexGuard<'_, State>>> {
-        self.try_acquire_permit_impl(&chrono::Utc::now().naive_utc())
-    }
-
     fn try_acquire_permits_impl(
         &self,
         for_time: &chrono::NaiveDateTime,
@@ -262,6 +250,24 @@ impl<const MAX_SIMULTANEOUS: usize> UnfairRateLimiter<MAX_SIMULTANEOUS> {
 
         MultiPermit::new(self, num_permits)
     }
+}
+
+impl<const MAX_SIMULTANEOUS: usize> super::RateLimiter for UnfairRateLimiter<MAX_SIMULTANEOUS> {
+    type SinglePermit<'a> = SinglePermit<'a, MAX_SIMULTANEOUS>;
+    type MultiPermit<'a> = MultiPermit<'a, MAX_SIMULTANEOUS>;
+    type Error<'a> = Error<std::sync::MutexGuard<'a, State>>;
+
+    /// Attempts to acquire a single permit.
+    ///
+    /// Returns a [`SinglePermit`] if a slot is available.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::NoPermitAvailable`] if all slots are occupied (either by active permits or by cooldowns from recently dropped permits).
+    /// Returns [`Error::MutexPoisoned`] if the internal state mutex is poisoned.
+    fn try_acquire_permit(&self) -> Result<Self::SinglePermit<'_>, Self::Error<'_>> {
+        self.try_acquire_permit_impl(&chrono::Utc::now().naive_utc())
+    }
 
     /// Attempts to acquire multiple permits at once.
     ///
@@ -270,11 +276,11 @@ impl<const MAX_SIMULTANEOUS: usize> UnfairRateLimiter<MAX_SIMULTANEOUS> {
     /// # Errors
     ///
     /// Returns [`Error::NoPermitAvailable`] if there are insufficient slots.
-    /// Returns [`Error::MutexPosioned`] if the internal state mutex is poisoned.
-    pub fn try_acquire_permits(
+    /// Returns [`Error::MutexPoisoned`] if the internal state mutex is poisoned.
+    fn try_acquire_permits(
         &self,
         num_permits: usize,
-    ) -> Result<MultiPermit<'_, MAX_SIMULTANEOUS>, Error<std::sync::MutexGuard<'_, State>>> {
+    ) -> Result<Self::MultiPermit<'_>, Self::Error<'_>> {
         self.try_acquire_permits_impl(&chrono::Utc::now().naive_utc(), num_permits)
     }
 }
