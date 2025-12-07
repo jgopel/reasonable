@@ -285,6 +285,64 @@ impl<const MAX_SIMULTANEOUS: usize> super::RateLimiter for UnfairRateLimiter<MAX
     }
 }
 
+#[cfg(feature = "tokio")]
+impl<const MAX_SIMULTANEOUS: usize> UnfairRateLimiter<MAX_SIMULTANEOUS> {
+    async fn retry_until_acquired<'a, TReturn>(
+        &self,
+        mut acquire_fn: impl FnMut() -> Result<TReturn, Error<std::sync::MutexGuard<'a, State>>>,
+    ) -> TReturn {
+        loop {
+            let result = acquire_fn();
+            let next_time = match result {
+                Ok(permit) => return permit,
+                Err(Error::NoPermitAvailable(next_time)) => next_time,
+                Err(Error::MutexPoisoned(_)) => panic!("Internal mutex is poisoned"),
+            };
+            let wait_time =
+                next_time.map_or(self.interval, |wake_time| wake_time - chrono::Utc::now());
+            tokio::time::sleep(
+                wait_time
+                    .to_std()
+                    // The wake time was in the past when the now calculation
+                    // was made, so just re-wake immediately
+                    .unwrap_or(std::time::Duration::from_secs(0)),
+            )
+            .await;
+        }
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl<const MAX_SIMULTANEOUS: usize> super::AsyncRateLimiter
+    for UnfairRateLimiter<MAX_SIMULTANEOUS>
+{
+    /// Asynchronously acquires a single permit.
+    ///
+    /// Waits until a slot is available if the rate limit has been reached.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal mutex is poisoned.
+    fn acquire_permit(&self) -> impl Future<Output = Self::SinglePermit<'_>> {
+        use super::RateLimiter;
+
+        self.retry_until_acquired(move || self.try_acquire_permit())
+    }
+
+    /// Asynchronously acquires multiple permits.
+    ///
+    /// Waits until enough slots are available if the rate limit has been reached.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal mutex is poisoned.
+    fn acquire_permits(&self, num_permits: usize) -> impl Future<Output = Self::MultiPermit<'_>> {
+        use super::RateLimiter;
+
+        self.retry_until_acquired(move || self.try_acquire_permits(num_permits))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -1097,6 +1155,58 @@ mod tests {
                     ])
                 }
             );
+        }
+    }
+
+    #[cfg(feature = "tokio")]
+    mod tokio_tests {
+        use crate::AsyncRateLimiter;
+        use crate::RateLimiter;
+
+        use super::*;
+
+        #[tokio::test]
+        async fn test_permit_already_available() {
+            let interval = chrono::Duration::milliseconds(100);
+            let limiter = UnfairRateLimiter::<1>::new(interval);
+
+            let start = chrono::Utc::now();
+            let _permit = limiter.acquire_permit().await;
+            let elapsed = chrono::Utc::now() - start;
+
+            assert!(elapsed < interval);
+        }
+
+        #[tokio::test]
+        async fn test_single_permit_cooldown() {
+            let interval = chrono::Duration::milliseconds(100);
+            let limiter = UnfairRateLimiter::<1>::new(interval);
+
+            let previous_permit = limiter.try_acquire_permit().unwrap();
+            drop(previous_permit);
+
+            let start = chrono::Utc::now();
+            let _permit = limiter.acquire_permit().await;
+            let elapsed = chrono::Utc::now() - start;
+
+            let cutoff = chrono::Duration::milliseconds(500);
+            assert!(interval <= elapsed && elapsed < cutoff);
+        }
+
+        #[tokio::test]
+        async fn test_multi_permit_cooldown() {
+            let interval = chrono::Duration::milliseconds(100);
+            let limiter = UnfairRateLimiter::<3>::new(interval);
+
+            let previous_permit = limiter.try_acquire_permits(3).unwrap();
+            drop(previous_permit);
+
+            let start = chrono::Utc::now();
+            let _permit = limiter.acquire_permits(3).await;
+            let elapsed = chrono::Utc::now() - start;
+
+            let cutoff = chrono::Duration::milliseconds(500);
+            assert!(interval <= elapsed && elapsed < cutoff);
         }
     }
 }

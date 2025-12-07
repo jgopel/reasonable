@@ -51,3 +51,12 @@ pub trait RateLimiter {
         num_permits: usize,
     ) -> Result<Self::MultiPermit<'_>, Self::Error<'_>>;
 }
+
+/// An async-capable rate limiter.
+pub trait AsyncRateLimiter: RateLimiter {
+    /// Asynchronously acquires a single permit.
+    fn acquire_permit(&self) -> impl Future<Output = Self::SinglePermit<'_>>;
+
+    /// Asynchronously acquires the requested number of permits.
+    fn acquire_permits(&self, num_permits: usize) -> impl Future<Output = Self::MultiPermit<'_>>;
+}
