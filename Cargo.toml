@@ -13,11 +13,7 @@ repository = "https://github.com/jgopel/reasonable"
 readme = "README.md"
 keywords = ["rate-limit", "cooldown", "concurrency"]
 categories = ["concurrency", "algorithms"]
-include = [
-    "src/**/*.rs",
-    "README.md",
-    "LICENSE",
-]
+include = ["src/**/*.rs", "README.md", "LICENSE"]
 
 [dependencies]
 chrono = "0.4.42"

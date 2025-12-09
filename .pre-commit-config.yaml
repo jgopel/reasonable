@@ -46,6 +46,11 @@ repos:
         entry: bash -c 'cargo fmt'
         language: rust
         pass_filenames: false
+      - id: cargo-doc
+        name: cargo doc
+        entry: bash -c 'cargo doc'
+        language: rust
+        pass_filenames: false
       - id: cargo-check
         name: cargo check
         entry: bash -c 'RUSTFLAGS="$RUSTFLAGS --deny warnings" cargo check --all-targets --all-features'
