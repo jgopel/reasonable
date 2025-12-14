@@ -1,0 +1,39 @@
+:emoji: [subsystem] Imperative subject
+# Ideally 50 chars ------------------------------>| max 72 chars ----->|
+
+Problem:
+-
+# - Ideally limit to 72 chars ---------------------------------------->|
+# - Describe why the change was necessary
+# - Feel free to use multiple bullet points
+#   continuations should go on the indent of the letter, not the bullet
+
+Solution:
+-
+# - Ideally limit to 72 chars ---------------------------------------->|
+# - Describe your solution to the problem
+# - Feel free to use multiple bullet points
+# - Same rules as above apply
+
+# Mention what GitHub issue this relates to or closes, if relevant.
+[Part of|Resolves] #123
+
+# Guide for how to write a good commit message: https://cbea.ms/git-commit/
+# Emoji set used: https://gitmoji.dev (Ctrl+K to search)
+#
+# Common emoji:
+# | Emoji              | Reason                             |
+# | ------------------ | ---------------------------------- |
+# | :sparkles:         | New feature                        |
+# | :bug:              | Fix a bug                          |
+# | :recycle:          | Refactor                           |
+# | :art:              | Improve structure / minor refactor |
+# | :zap:              | Improve performance                |
+# | :fire:             | Remove code                        |
+# | :memo:             | Add/update documentation           |
+# | :rotating_light:   | Fix CI/quality checks              |
+# | :white_check_mark: | Add, improve, or fix tests         |
+# | :arrow_up:         | Update dependencies                |
+# | :wrench:           | Add/update config files            |
+# | :hammer:           | Add/update development scripts     |
+# | :pencil2:          | Fix typos                          |
