@@ -16,3 +16,47 @@
 mod unfair_rate_limiter;
 
 pub use unfair_rate_limiter::*;
+
+/// A trait for all the rate limiters in this crate.
+pub trait RateLimiter {
+    /// A RAII permit for a single unit of concurrency.
+    type SinglePermit<'a>
+    where
+        Self: 'a;
+
+    /// A RAII permit for multiple units of concurrency.
+    type MultiPermit<'a>
+    where
+        Self: 'a;
+
+    /// The error type returned when a permit cannot be acquired.
+    type Error<'a>
+    where
+        Self: 'a;
+
+    /// Attempts to acquire a single permit.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a permit cannot be acquired.
+    fn try_acquire_permit(&self) -> Result<Self::SinglePermit<'_>, Self::Error<'_>>;
+
+    /// Attempts to acquire multiple permits at once.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the requested number of permits cannot be acquired.
+    fn try_acquire_permits(
+        &self,
+        num_permits: usize,
+    ) -> Result<Self::MultiPermit<'_>, Self::Error<'_>>;
+}
+
+/// An async-capable rate limiter.
+pub trait AsyncRateLimiter: RateLimiter {
+    /// Asynchronously acquires a single permit.
+    fn acquire_permit(&self) -> impl Future<Output = Self::SinglePermit<'_>>;
+
+    /// Asynchronously acquires the requested number of permits.
+    fn acquire_permits(&self, num_permits: usize) -> impl Future<Output = Self::MultiPermit<'_>>;
+}

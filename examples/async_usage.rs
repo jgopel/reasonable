@@ -4,7 +4,7 @@
 //! where the "cost" (cooldown) is applied after the work is done.
 
 use chrono::Duration;
-use reasonable::{Error, UnfairRateLimiter};
+use reasonable::{Error, RateLimiter, UnfairRateLimiter};
 
 const DEFAULT_SLEEP: std::time::Duration = std::time::Duration::from_millis(100);
 
