@@ -1,0 +1,40 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: friday
+      time: "09:00"
+    groups:
+    commit-message:
+      prefix: ":arrow_up:"
+    reviewers:
+      - "jgopel"
+      - "ajscimone"
+
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: friday
+      time: "09:00"
+    groups:
+    commit-message:
+      prefix: ":arrow_up:"
+    reviewers:
+      - "jgopel"
+      - "scimoneaj"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: friday
+      time: "09:00"
+    groups:
+    commit-message:
+      prefix: ":arrow_up:"
+    reviewers:
+      - "jgopel"
+      - "scimoneaj"
